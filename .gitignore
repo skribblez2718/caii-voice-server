@@ -1,0 +1,49 @@
+# Environment variables - CRITICAL
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.venv/
+
+# Keys and certificates
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.pub
+id_rsa*
+id_ed25519*
+
+# Credentials
+secrets.json
+credentials.json
+*.credentials
+.aws/
+.config/gcloud/
+
+# IDE/Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs (may contain sensitive data)
+*.log
+logs/
+
+# Local overrides
+*.local

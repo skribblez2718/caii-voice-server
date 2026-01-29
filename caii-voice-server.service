@@ -1,0 +1,31 @@
+[Unit]
+Description=CAII Voice Server
+After=network.target sound.target
+
+[Service]
+Type=simple
+User=caii-voice-server
+Group=caii-voice-server
+WorkingDirectory=/home/caii-voice-server
+Environment=PATH=/home/caii-voice-server/.venv/bin:/home/caii-voice-server/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=HOME=/home/caii-voice-server
+EnvironmentFile=-/home/caii-voice-server/.env
+ExecStart=/home/caii-voice-server/.venv/bin/python /home/caii-voice-server/server.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Security settings
+NoNewPrivileges=yes
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/home/caii-voice-server/logs
+PrivateTmp=yes
+PrivateDevices=no
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+
+[Install]
+WantedBy=multi-user.target
