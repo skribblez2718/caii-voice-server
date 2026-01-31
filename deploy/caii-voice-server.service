@@ -9,8 +9,9 @@ Group=caii-voice-server
 WorkingDirectory=/home/caii-voice-server
 Environment=PATH=/home/caii-voice-server/.venv/bin:/home/caii-voice-server/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=HOME=/home/caii-voice-server
+Environment=NUMBA_CACHE_DIR=/home/caii-voice-server/.cache/numba
 EnvironmentFile=-/home/caii-voice-server/.env
-ExecStart=/home/caii-voice-server/.venv/bin/python /home/caii-voice-server/server.py
+ExecStart=/home/caii-voice-server/.venv/bin/python /home/caii-voice-server/main.py
 Restart=always
 RestartSec=10
 StandardOutput=journal
@@ -20,7 +21,8 @@ StandardError=journal
 NoNewPrivileges=yes
 ProtectSystem=full
 ProtectHome=read-only
-ReadWritePaths=/home/caii-voice-server/logs
+ReadWritePaths=/home/caii-voice-server/logs /home/caii-voice-server/voices /home/caii-voice-server/.cache
+ReadOnlyPaths=/home/skribblez/ai/models
 PrivateTmp=yes
 PrivateDevices=no
 ProtectKernelTunables=yes

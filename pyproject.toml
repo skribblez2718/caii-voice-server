@@ -1,0 +1,31 @@
+[project]
+name = "caii-voice-server"
+version = "4.0.0"
+description = "Modular TTS/STT server using Qwen-TTS and Faster-Whisper"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.128.0",
+    "pydantic>=2.12.5",
+    "pydantic-settings>=2.0.0",
+    "python-dotenv>=1.0.0",
+    "python-multipart>=0.0.22",
+    "uvicorn[standard]>=0.40.0",
+    # Core dependencies (must be installed before TTS due to sox bug)
+    "numpy>=1.24.0",
+    "typing_extensions>=4.0.0",
+    # TTS
+    "qwen-tts>=0.0.5",
+    "soundfile>=0.12.0",
+    "torch>=2.0.0",
+    # STT
+    "faster-whisper>=1.0.0",
+    "pydub>=0.25.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "httpx>=0.28.0",
+]

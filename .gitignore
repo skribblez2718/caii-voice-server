@@ -47,3 +47,6 @@ logs/
 
 # Local overrides
 *.local
+
+# Voice files (large audio files - keep in voices/.gitignore)
+# Individual voice files are managed by voices/.gitignore

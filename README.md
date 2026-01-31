@@ -1,192 +1,227 @@
-# CAII Voice Server - Linux Python Version
+# CAII Voice Server
 
-A Linux HTTP server for sending desktop notifications with optional text-to-speech capabilities using ElevenLabs or Linux TTS engines.
+A modular FastAPI server for Text-to-Speech (TTS) and Speech-to-Text (STT) using local AI models:
+- **TTS**: Qwen-TTS for voice cloning and voice creation
+- **STT**: Faster-Whisper for speech transcription
+
+## Features
+
+- **Voice Cloning**: Clone voices from reference audio files
+- **Voice Creation**: Generate new voices from text descriptions using VoiceDesign
+- **Speech-to-Text**: Transcribe audio using local Whisper models
+- **Agent Voice Mapping**: Pre-configured voices for different AI agents
+- **API Key Authentication**: Optional API key protection
+- **Rate Limiting**: Configurable per-IP rate limiting
+- **OpenAI-Compatible API**: Drop-in replacement for OpenAI TTS/STT endpoints
 
 ## System Requirements
+
+### Hardware
+- NVIDIA GPU with CUDA support (recommended)
+- Minimum 8GB VRAM for TTS models
+- 16GB+ RAM recommended
 
 ### System Dependencies
 ```bash
 # Ubuntu/Debian
-sudo apt install python3 python3-pip libnotify-bin espeak-ng mpg123 ffmpeg curl
+sudo apt install python3 python3-pip python3-venv ffmpeg
 
-# Fedora
-sudo dnf install python3 python3-pip libnotify espeak-ng mpg123 ffmpeg curl
-
-# Arch Linux
-sudo pacman -S python python-pip libnotify espeak-ng mpg123 ffmpeg curl
+# For audio processing
+sudo apt install libsndfile1
 ```
 
-**Important:** `ffmpeg` is required for audio playback with `paplay` and as a fallback audio converter. Without it, audio notifications from the session start hook will fail silently.
-
-### UV Package Manager (Recommended)
-Install uv for faster Python package management using the official installer:
-
-```bash
-# Install uv globally (for regular users)
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# For the caii-voice-server system user (with /usr/bin/false shell)
-sudo -u caii-voice-server bash -c 'curl -LsSf https://astral.sh/uv/install.sh | sh'
-```
-
-After installation, uv will be installed to `$HOME/.local/bin` and you can activate the environment:
-```bash
-# For caii-voice-server user, uv is installed to /home/caii-voice-server/.local/bin
-# Activate uv environment with: source $HOME/.local/bin/env
-```
-
-Alternative installation methods:
-```bash
-# Using pipx (if available)
-pipx install uv
-
-# Using wget instead of curl
-wget -qO- https://astral.sh/uv/install.sh | sh
-```
-
-### Python Dependencies (Virtual Environment)
-Required Python packages:
-- FastAPI (web framework)
-- uvicorn (ASGI server)
-- httpx (HTTP client for ElevenLabs)
-- pydantic (data validation)
-- python-dotenv (environment variable loading)
+### AI Models Required
+Download and place these models locally:
+- **Qwen3-TTS-12Hz-1.7B-Base** - For voice cloning
+- **Qwen3-TTS-12Hz-1.7B-VoiceDesign** - For voice creation
 
 ## Quick Setup
 
-For automated installation, use the setup script:
+Use the automated setup script:
 ```bash
-cd /home/caii-voice-server
-sudo ./setup.sh
+cd /path/to/caii-voice-server
+sudo ./deploy/setup.sh
+```
+
+Then configure the server:
+```bash
+sudo nano /home/caii-voice-server/.env
+# Set TTS_BASE_MODEL_PATH and TTS_VOICE_DESIGN_MODEL_PATH
+```
+
+Start the service:
+```bash
 sudo systemctl start caii-voice-server
 ```
 
-## Manual Installation
+## Configuration
 
-### 1. Install uv for the caii-voice-server user
-Since the `caii-voice-server` user has `/usr/bin/false` as their shell, we need to use `bash -c` for the installation:
+All configuration is done via environment variables in `.env`:
 
-```bash
-# Install uv using the official installer
-sudo -u caii-voice-server bash -c 'curl -LsSf https://astral.sh/uv/install.sh | sh'
-
-# Verify installation (uv installs to $HOME/.local/bin)
-sudo -u caii-voice-server bash -c 'source ~/.local/bin/env && uv --version'
-```
-
-### 2. Create Virtual Environment and Install Dependencies
-```bash
-cd /home/caii-voice-server
-
-# Create virtual environment using uv as caii-voice-server user
-sudo -u caii-voice-server bash -c 'cd /home/caii-voice-server && source ~/.local/bin/env && uv venv .venv'
-
-# Install dependencies using uv as caii-voice-server user
-sudo -u caii-voice-server bash -c 'cd /home/caii-voice-server && source ~/.local/bin/env && uv pip install -r requirements.txt --python .venv/bin/python'
-```
-
-### 3. Add caii-voice-server to audio group
-```bash
-sudo usermod -a -G audio caii-voice-server
-```
-
-### 4. Install systemd Service
-```bash
-sudo cp /home/caii-voice-server/caii-voice-server.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable caii-voice-server
-sudo systemctl start caii-voice-server
-```
-
-### 5. Configuration
-
-A template `.env` file is included with sample configuration. Add your ElevenLabs API key:
-```bash
-sudo bash -c 'echo "ELEVENLABS_API_KEY=your_api_key_here" >> /home/caii-voice-server/.env'
-```
-
-You can also edit the `.env` file directly to configure:
-- `PORT` - Server port (default: 8888)
-- `ELEVENLABS_API_KEY` - Your ElevenLabs API key
-- `ELEVENLABS_VOICE_ID` - Specific voice ID to use
-
-Without an API key, the server will use Linux TTS (espeak-ng/espeak/festival) as fallback.
-
-## Service Management
-
-```bash
-# Service control
-sudo systemctl start caii-voice-server
-sudo systemctl stop caii-voice-server
-sudo systemctl restart caii-voice-server
-sudo systemctl status caii-voice-server
-
-# View logs
-journalctl -u caii-voice-server -f
-journalctl -u caii-voice-server -n 50
-```
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `HOST` | Server bind address | `127.0.0.1` |
+| `PORT` | Server port | `8001` |
+| `VOICE_SERVER_API_KEY` | API key for authentication (optional) | None (auth disabled) |
+| `VOICES_DIRECTORY` | Directory containing voice files | `./voices` |
+| `TTS_BASE_MODEL_PATH` | Path to Qwen-TTS Base model | **Required** |
+| `TTS_VOICE_DESIGN_MODEL_PATH` | Path to Qwen-TTS VoiceDesign model | **Required** |
+| `STT_MODEL_NAME` | Whisper model size (tiny/base/small/medium/large) | `base` |
+| `STT_DEVICE` | Device for STT (cuda/cpu) | `cuda` |
+| `STT_COMPUTE_TYPE` | Compute type for STT | `float16` |
+| `RATE_LIMIT_REQUESTS` | Max requests per window | `10` |
+| `RATE_LIMIT_WINDOW_SECONDS` | Rate limit window | `60` |
 
 ## API Endpoints
 
 ### Health Check
 ```bash
-curl http://localhost:8888/health
+curl http://localhost:8001/health
 ```
 
-### Send Notification
+### Text-to-Speech (OpenAI-compatible)
 ```bash
-curl -X POST http://localhost:8888/notify \
+curl -X POST http://localhost:8001/v1/audio/speech \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: your-api-key" \
   -d '{
-    "title": "Test Notification",
-    "message": "Hello from CAII Voice Server",
-    "voice_enabled": true,
-    "voice_id": "optional_elevenlabs_voice_id"
-  }'
+    "model": "tts-1",
+    "input": "Hello, how are you today?",
+    "voice": "alloy",
+    "agent": "da"
+  }' \
+  --output speech.wav
 ```
 
-### Voice Server Notification
+The `agent` parameter selects which pre-configured voice to use.
+
+### Speech-to-Text (OpenAI-compatible)
 ```bash
-curl -X POST http://localhost:8888/notify \
-  -H "Content-Type: application/json" \
-  -d '{
-    "title": "CAII Voice Server",
-    "message": "Task completed successfully"
-  }'
+curl -X POST http://localhost:8001/v1/audio/transcriptions \
+  -H "X-API-Key: your-api-key" \
+  -F "file=@audio.wav" \
+  -F "model=whisper-1"
 ```
 
-## Features
+### List Voices
+```bash
+curl http://localhost:8001/v1/voices \
+  -H "X-API-Key: your-api-key"
+```
 
-### Audio/TTS Support
-- **ElevenLabs**: Premium AI voices (requires API key)
-- **Linux TTS**: espeak-ng, espeak, festival, spd-say
-- **Audio Playback**: mpg123 (recommended), mpv, ffplay, paplay
-  - **Note**: `paplay` requires `ffmpeg` for MP3->WAV conversion
-  - Session start audio notifications will fail silently without a compatible audio player
+### Create New Voice
+```bash
+curl -X POST http://localhost:8001/v1/voices \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-api-key" \
+  -d '{
+    "agent_name": "custom",
+    "instruct": "Female, mid-twenties. Warm, friendly timbre with natural mid-range pitch."
+  }' \
+  --output custom.wav
+```
 
-### Desktop Notifications
-- Uses Linux `notify-send` for desktop notifications
-- Works with most Linux desktop environments
+### Reload Voices
+```bash
+curl -X POST http://localhost:8001/v1/voices/reload \
+  -H "X-API-Key: your-api-key"
+```
 
-### Security
-- CORS restricted to localhost
-- Input validation and sanitization
-- Rate limiting (10 requests/minute per IP)
-- Systemd service isolation
-- Protected file system access
+## Pre-configured Agent Voices
+
+| Agent | Description |
+|-------|-------------|
+| `da` | Female, mid-thirties. Warm, smooth timbre with clear mid-range pitch |
+| `analysis` | Male, early thirties. Sharp, focused timbre with clear mid-range pitch |
+| `clarification` | Female, late twenties. Clear, gentle timbre with slightly bright mid-range pitch |
+| `memory` | Male, mid-fifties. Rich, grounded timbre with warm low-mid pitch |
+| `research` | Male, early forties. Warm, scholarly timbre with natural mid-range pitch |
+| `synthesis` | Female, mid-forties. Smooth, harmonious timbre with calm mid-range pitch |
+| `verification` | Female, late thirties. Crisp, confident timbre with clear mid-range pitch |
 
 ## File Structure
 
 ```
-/home/caii-voice-server/
-├── server.py                    # Main Python server
-├── requirements.txt             # Python dependencies
-├── caii-voice-server.service  # systemd service file
-├── setup.sh                     # Setup script
-├── .env                         # Configuration template
-├── .venv/                       # Python virtual environment
-├── logs/                        # Log directory
-└── README.md                    # This file
+caii-voice-server/
+├── main.py                     # Application entry point
+├── app/
+│   ├── __init__.py             # App factory with lifespan
+│   ├── config.py               # Pydantic settings configuration
+│   ├── dependencies.py         # Model loading & voice prompt caching
+│   ├── api/
+│   │   ├── __init__.py
+│   │   └── routes/
+│   │       ├── __init__.py     # Route aggregation
+│   │       ├── tts.py          # POST /v1/audio/speech
+│   │       ├── stt.py          # POST /v1/audio/transcriptions
+│   │       ├── voice.py        # Voice management endpoints
+│   │       └── health.py       # Health check endpoints
+│   └── middleware/
+│       ├── __init__.py
+│       ├── auth.py             # API key validation
+│       └── rate_limit.py       # Rate limiting
+├── voices/
+│   ├── voices.json             # Voice metadata configuration
+│   └── *.wav                   # Voice reference audio files
+├── deploy/
+│   ├── setup.sh                # Automated installation script
+│   ├── uninstall.sh            # Complete removal script
+│   └── caii-voice-server.service  # Systemd service file
+├── .env.example                # Configuration template
+├── pyproject.toml              # Python dependencies
+└── README.md                   # This file
+```
+
+## Service Management
+
+```bash
+# Start/stop/restart
+sudo systemctl start caii-voice-server
+sudo systemctl stop caii-voice-server
+sudo systemctl restart caii-voice-server
+
+# Check status
+sudo systemctl status caii-voice-server
+
+# View logs
+sudo journalctl -u caii-voice-server -f
+sudo journalctl -u caii-voice-server -n 50
+```
+
+## Development
+
+### Local Setup
+```bash
+# Clone and enter directory
+cd caii-voice-server
+
+# Create virtual environment
+uv venv
+
+# Install dependencies
+uv sync
+
+# Create .env from template
+cp .env.example .env
+# Edit .env to set model paths
+
+# Run locally
+python main.py
+```
+
+### Testing
+```bash
+# Health check
+curl http://localhost:8001/health
+
+# Test TTS
+curl -X POST http://localhost:8001/v1/audio/speech \
+  -H "Content-Type: application/json" \
+  -d '{"input": "Hello world", "agent": "da"}' \
+  --output test.wav
+
+# Play audio
+aplay test.wav
 ```
 
 ## Troubleshooting
@@ -197,76 +232,58 @@ curl -X POST http://localhost:8888/notify \
 sudo systemctl status caii-voice-server
 
 # View detailed logs
-journalctl -u caii-voice-server -f
+sudo journalctl -u caii-voice-server -f
 
-# Test server manually (as caii-voice-server user)
-sudo -u caii-voice-server bash -c 'cd /home/caii-voice-server && .venv/bin/python server.py'
+# Test server manually
+sudo -u caii-voice-server bash -c 'cd /home/caii-voice-server && .venv/bin/python main.py'
+```
+
+### Model Loading Issues
+```bash
+# Verify model paths in .env
+sudo cat /home/caii-voice-server/.env | grep MODEL
+
+# Check if models exist
+ls -la /path/to/Qwen3-TTS-12Hz-1.7B-Base
+ls -la /path/to/Qwen3-TTS-12Hz-1.7B-VoiceDesign
 ```
 
 ### Permission Issues
 ```bash
-# Verify log directory permissions
-ls -la /home/caii-voice-server/logs
+# Verify directory ownership
+ls -la /home/caii-voice-server/
 
-# Check if caii-voice-server user can write to logs
-sudo -u caii-voice-server bash -c 'touch /home/caii-voice-server/logs/test.log && rm /home/caii-voice-server/logs/test.log'
+# Fix ownership if needed
+sudo chown -R caii-voice-server:caii-voice-server /home/caii-voice-server
 ```
 
-### UV Installation Issues
+### CUDA/GPU Issues
 ```bash
-# If curl fails, try wget
-sudo -u caii-voice-server bash -c 'wget -qO- https://astral.sh/uv/install.sh | sh'
+# Check CUDA availability
+python -c "import torch; print(torch.cuda.is_available())"
 
-# Manual installation if installer fails
-sudo mkdir -p /home/caii-voice-server/.local/bin
-sudo wget -O /home/caii-voice-server/.local/bin/uv https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-unknown-linux-gnu
-sudo chmod +x /home/caii-voice-server/.local/bin/uv
-sudo chown caii-voice-server:caii-voice-server /home/caii-voice-server/.local/bin/uv
-
-# Test manual installation
-sudo -u caii-voice-server bash -c '/home/caii-voice-server/.local/bin/uv --version'
-```
-
-### Missing Dependencies
-```bash
-# Install notification support
-sudo apt install libnotify-bin notification-daemon
-
-# Install TTS engine
-sudo apt install espeak-ng
-
-# Install audio players for ElevenLabs MP3 playback
-# mpg123 is lightweight and recommended
-sudo apt install mpg123
-
-# OR install mpv (full-featured player)
-sudo apt install mpv
-
-# ffmpeg is REQUIRED if only paplay is available
-# (paplay needs ffmpeg to convert MP3 to WAV)
-sudo apt install ffmpeg
-```
-
-### Virtual Environment Issues
-```bash
-# Recreate virtual environment if corrupted
-sudo -u caii-voice-server bash -c 'cd /home/caii-voice-server && rm -rf .venv'
-sudo -u caii-voice-server bash -c 'cd /home/caii-voice-server && source ~/.local/bin/env && uv venv .venv'
-sudo -u caii-voice-server bash -c 'cd /home/caii-voice-server && source ~/.local/bin/env && uv pip install -r requirements.txt --python .venv/bin/python'
+# Check GPU memory
+nvidia-smi
 ```
 
 ## Uninstallation
 
+Use the automated uninstall script:
 ```bash
-# Stop and disable service
-sudo systemctl stop caii-voice-server
-sudo systemctl disable caii-voice-server
-sudo rm /etc/systemd/system/caii-voice-server.service
-sudo systemctl daemon-reload
-
-# Remove system user
-sudo userdel caii-voice-server
-
-# Remove server files (optional)
-sudo rm -rf /home/caii-voice-server
+sudo ./deploy/uninstall.sh
 ```
+
+This will:
+- Stop and disable the systemd service
+- Remove the service file
+- Delete the application directory (`/home/caii-voice-server`)
+- Remove the `caii-voice-server` system user and group
+
+**Note**: The uninstall script does not remove:
+- System Python or packages
+- The source project directory
+- External AI model files
+
+## License
+
+See [LICENSE](LICENSE) file.

@@ -8,17 +8,33 @@ echo "🔧 Setting up CAII Voice Server..."
 
 # Determine source directory (where this script is located)
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+# Project root is parent of deploy directory
+PROJECT_DIR="$( cd "${SCRIPT_DIR}/.." && pwd )"
 TARGET_DIR="/home/caii-voice-server"
 
-# Detect Python command and version
-echo "🐍 Detecting Python installation..."
-if command -v python3 &> /dev/null; then
-    PYTHON_CMD="python3"
-elif command -v python &> /dev/null; then
-    PYTHON_CMD="python"
-else
-    echo "❌ Error: Python is not installed"
-    echo "   Please install Python 3.x and try again"
+echo "📁 Source: ${PROJECT_DIR}"
+echo "📁 Target: ${TARGET_DIR}"
+
+# Detect latest system Python (not pyenv/user-specific)
+echo "🐍 Detecting system Python installation..."
+PYTHON_CMD=""
+
+# Check for system Python versions in order of preference (newest first)
+for py_version in python3.13 python3.12 python3.11 python3.10; do
+    if [ -x "/usr/bin/${py_version}" ]; then
+        PYTHON_CMD="/usr/bin/${py_version}"
+        break
+    fi
+done
+
+# Fallback to generic python3 in /usr/bin
+if [ -z "$PYTHON_CMD" ] && [ -x "/usr/bin/python3" ]; then
+    PYTHON_CMD="/usr/bin/python3"
+fi
+
+if [ -z "$PYTHON_CMD" ]; then
+    echo "❌ Error: No system Python 3.x found in /usr/bin/"
+    echo "   Please install Python 3.10+ and try again"
     exit 1
 fi
 
@@ -27,13 +43,13 @@ PYTHON_VERSION=$($PYTHON_CMD --version 2>&1 | awk '{print $2}')
 PYTHON_MAJOR=$($PYTHON_CMD -c 'import sys; print(sys.version_info.major)')
 PYTHON_MINOR=$($PYTHON_CMD -c 'import sys; print(sys.version_info.minor)')
 
-# Verify Python 3.x
-if [ "$PYTHON_MAJOR" -ne 3 ]; then
-    echo "❌ Error: Python 3.x is required (found Python $PYTHON_VERSION)"
+# Verify Python 3.10+
+if [ "$PYTHON_MAJOR" -ne 3 ] || [ "$PYTHON_MINOR" -lt 10 ]; then
+    echo "❌ Error: Python 3.10+ is required (found Python $PYTHON_VERSION)"
     exit 1
 fi
 
-echo "✅ Found Python $PYTHON_VERSION at $(command -v $PYTHON_CMD)"
+echo "✅ Found Python $PYTHON_VERSION at $PYTHON_CMD"
 
 # Create system user and group
 echo "📝 Creating caii-voice-server system user..."
@@ -58,19 +74,47 @@ sudo usermod -a -G audio caii-voice-server
 
 # Deploy application files to target directory
 echo "📦 Deploying application files to ${TARGET_DIR}..."
-sudo cp ${SCRIPT_DIR}/server.py ${TARGET_DIR}/
-sudo cp ${SCRIPT_DIR}/requirements.txt ${TARGET_DIR}/
-sudo chmod 644 ${TARGET_DIR}/server.py
-sudo chmod 644 ${TARGET_DIR}/requirements.txt
+
+# Copy main entry point
+sudo cp ${PROJECT_DIR}/main.py ${TARGET_DIR}/
+sudo chmod 644 ${TARGET_DIR}/main.py
+
+# Copy app module directory
+sudo rm -rf ${TARGET_DIR}/app
+sudo cp -r ${PROJECT_DIR}/app ${TARGET_DIR}/
+# Remove __pycache__ directories to avoid stale bytecode with wrong paths
+sudo find ${TARGET_DIR}/app -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+sudo chmod -R 755 ${TARGET_DIR}/app
+sudo find ${TARGET_DIR}/app -type f -name "*.py" -exec chmod 644 {} \;
+
+# Copy voices directory (config and audio files)
+sudo rm -rf ${TARGET_DIR}/voices
+sudo cp -r ${PROJECT_DIR}/voices ${TARGET_DIR}/
+sudo chmod 755 ${TARGET_DIR}/voices
+sudo find ${TARGET_DIR}/voices -type f -exec chmod 644 {} \;
+WAV_COUNT=$(sudo find ${TARGET_DIR}/voices -name "*.wav" 2>/dev/null | wc -l)
+echo "✅ Voices directory copied (${WAV_COUNT} audio files)"
+
+# Copy dependency files
+sudo cp ${PROJECT_DIR}/pyproject.toml ${TARGET_DIR}/
+sudo chmod 644 ${TARGET_DIR}/pyproject.toml
+if [ -f "${PROJECT_DIR}/uv.lock" ]; then
+    sudo cp ${PROJECT_DIR}/uv.lock ${TARGET_DIR}/
+    sudo chmod 644 ${TARGET_DIR}/uv.lock
+fi
+if [ -f "${PROJECT_DIR}/requirements.txt" ]; then
+    sudo cp ${PROJECT_DIR}/requirements.txt ${TARGET_DIR}/
+    sudo chmod 644 ${TARGET_DIR}/requirements.txt
+fi
 
 # Handle .env file (don't overwrite if exists)
 if [ -f "${TARGET_DIR}/.env" ]; then
     echo "ℹ️  .env already exists - preserving existing configuration"
 else
-    if [ -f "${SCRIPT_DIR}/.env.example" ]; then
-        sudo cp ${SCRIPT_DIR}/.env.example ${TARGET_DIR}/.env
+    if [ -f "${PROJECT_DIR}/.env.example" ]; then
+        sudo cp ${PROJECT_DIR}/.env.example ${TARGET_DIR}/.env
         sudo chmod 640 ${TARGET_DIR}/.env
-        echo "📝 Created .env from template (edit with your API keys)"
+        echo "📝 Created .env from template (edit to configure)"
     else
         echo "⚠️  No .env.example found - you'll need to create .env manually"
     fi
@@ -79,11 +123,27 @@ fi
 # Set ownership for all deployed files
 sudo chown -R caii-voice-server:caii-voice-server ${TARGET_DIR}
 
+# Verify deployment
+echo "📋 Deployed files:"
+echo "   • main.py"
+echo "   • app/ ($(sudo find ${TARGET_DIR}/app -name '*.py' | wc -l) Python files)"
+echo "   • voices/ ($(sudo find ${TARGET_DIR}/voices -name '*.wav' 2>/dev/null | wc -l) audio files + voices.json)"
+echo "   • pyproject.toml"
+[ -f "${TARGET_DIR}/uv.lock" ] && echo "   • uv.lock"
+[ -f "${TARGET_DIR}/requirements.txt" ] && echo "   • requirements.txt"
+echo "   • .env"
+
 # Set up log directory
 echo "📁 Setting up log directory..."
 sudo mkdir -p ${TARGET_DIR}/logs
 sudo chown caii-voice-server:caii-voice-server ${TARGET_DIR}/logs
 sudo chmod 775 ${TARGET_DIR}/logs
+
+# Set up cache directory (for numba JIT compilation cache)
+echo "📁 Setting up cache directory..."
+sudo mkdir -p ${TARGET_DIR}/.cache/numba
+sudo chown -R caii-voice-server:caii-voice-server ${TARGET_DIR}/.cache
+sudo chmod -R 775 ${TARGET_DIR}/.cache
 
 # Set default ACL for new files in the log directory
 if command -v setfacl &> /dev/null; then
@@ -133,11 +193,25 @@ fi
 
 # Install Python dependencies
 echo "📦 Installing Python dependencies..."
+
+# Install sox build dependencies first (workaround for sox package bug that imports during metadata generation)
+echo "   Installing sox build dependencies first (numpy, typing_extensions)..."
 if [ -f "${UV_PATH}" ]; then
-    sudo -H -u caii-voice-server bash -c "env PATH='${TARGET_DIR}/.local/bin:${TARGET_DIR}/.venv/bin:$PATH' uv pip install -r ${TARGET_DIR}/requirements.txt"
-    echo "✅ Dependencies installed with uv"
+    sudo -H -u caii-voice-server bash -c "env PATH='${TARGET_DIR}/.local/bin:${TARGET_DIR}/.venv/bin:$PATH' uv pip install numpy typing_extensions"
 else
-    sudo -H -u caii-voice-server bash -c "${TARGET_DIR}/.venv/bin/pip install -r ${TARGET_DIR}/requirements.txt"
+    sudo -H -u caii-voice-server bash -c "${TARGET_DIR}/.venv/bin/pip install numpy typing_extensions"
+fi
+
+# Install remaining dependencies
+if [ -f "${UV_PATH}" ]; then
+    sudo -H -u caii-voice-server bash -c "cd ${TARGET_DIR} && env PATH='${TARGET_DIR}/.local/bin:${TARGET_DIR}/.venv/bin:$PATH' uv sync"
+    echo "✅ Dependencies installed with uv sync"
+else
+    if [ -f "${TARGET_DIR}/requirements.txt" ]; then
+        sudo -H -u caii-voice-server bash -c "${TARGET_DIR}/.venv/bin/pip install -r ${TARGET_DIR}/requirements.txt"
+    else
+        sudo -H -u caii-voice-server bash -c "${TARGET_DIR}/.venv/bin/pip install fastapi uvicorn pydantic-settings qwen-tts faster-whisper soundfile pydub python-multipart"
+    fi
     echo "⚠️  Dependencies installed with pip (uv not available)"
 fi
 
@@ -155,16 +229,27 @@ echo "📋 Deployment Summary:"
 echo "   • User: caii-voice-server"
 echo "   • Home: ${TARGET_DIR}"
 echo "   • Logs: ${TARGET_DIR}/logs"
+echo "   • Voices: ${TARGET_DIR}/voices"
+echo "   • Cache: ${TARGET_DIR}/.cache (numba JIT cache)"
 echo "   • Python: $PYTHON_CMD ($PYTHON_VERSION)"
 if [ -f "${UV_PATH}" ]; then
     echo "   • Package Manager: uv (${UV_PATH})"
 else
     echo "   • Package Manager: pip (fallback)"
 fi
+# Read HOST and PORT from .env for display
+ENV_HOST=$(sudo grep -E "^HOST=" ${TARGET_DIR}/.env 2>/dev/null | cut -d'=' -f2)
+ENV_PORT=$(sudo grep -E "^PORT=" ${TARGET_DIR}/.env 2>/dev/null | cut -d'=' -f2)
+# Use defaults if empty
+ENV_HOST=${ENV_HOST:-127.0.0.1}
+ENV_PORT=${ENV_PORT:-8001}
+
 echo ""
 echo "🔑 Next steps:"
-echo "  1. Add your ElevenLabs API credentials to .env:"
+echo "  1. Configure the server (REQUIRED - set model paths):"
 echo "     sudo nano ${TARGET_DIR}/.env"
+echo "     - Set TTS_BASE_MODEL_PATH and TTS_VOICE_DESIGN_MODEL_PATH"
+echo "     - Optionally set VOICE_SERVER_API_KEY for authentication"
 echo ""
 echo "  2. Start the service:"
 echo "     sudo systemctl start caii-voice-server"
@@ -176,6 +261,6 @@ echo "  4. View logs:"
 echo "     sudo journalctl -u caii-voice-server -f"
 echo ""
 echo "  5. Test the service:"
-echo "     curl http://localhost:<PORT>/health"
+echo "     curl http://${ENV_HOST}:${ENV_PORT}/health"
 echo ""
 echo "💡 To update the application, run this setup script again"

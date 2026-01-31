@@ -1,0 +1,8 @@
+# Ignore all audio files
+*.wav
+*.mp3
+*.ogg
+*.flac
+
+# Keep the voices.json config
+!voices.json

@@ -1,0 +1,40 @@
+{
+  "voices": {
+    "da": {
+      "file": "da.wav",
+      "description": "Female, mid-thirties. Warm, smooth timbre with clear mid-range pitch",
+      "instruct": "Female, mid-thirties. Warm, smooth timbre with clear mid-range pitch. Helpful, enthusiastic, and knowledgeable companion."
+    },
+    "analysis": {
+      "file": "analysis.wav",
+      "description": "Male, early thirties. Sharp, focused timbre with clear mid-range pitch",
+      "instruct": "Male, early thirties. Sharp, focused timbre with clear mid-range pitch. Analytical and precise."
+    },
+    "clarification": {
+      "file": "clarification.wav",
+      "description": "Female, late twenties. Clear, gentle timbre with slightly bright mid-range pitch",
+      "instruct": "Female, late twenties. Clear, gentle timbre with slightly bright mid-range pitch. Patient and thorough."
+    },
+    "memory": {
+      "file": "memory.wav",
+      "description": "Male, mid-fifties. Rich, grounded timbre with warm low-mid pitch",
+      "instruct": "Male, mid-fifties. Rich, grounded timbre with warm low-mid pitch. Wise and reflective."
+    },
+    "research": {
+      "file": "research.wav",
+      "description": "Male, early forties. Warm, scholarly timbre with natural mid-range pitch",
+      "instruct": "Male, early forties. Warm, scholarly timbre with natural mid-range pitch. Curious and thorough."
+    },
+    "synthesis": {
+      "file": "synthesis.wav",
+      "description": "Female, mid-forties. Smooth, harmonious timbre with calm mid-range pitch",
+      "instruct": "Female, mid-forties. Smooth, harmonious timbre with calm mid-range pitch. Integrative and balanced."
+    },
+    "verification": {
+      "file": "verification.wav",
+      "description": "Female, late thirties. Crisp, confident timbre with clear mid-range pitch",
+      "instruct": "Female, late thirties. Crisp, confident timbre with clear mid-range pitch. Precise and methodical."
+    }
+  },
+  "default_voice": "da"
+}
