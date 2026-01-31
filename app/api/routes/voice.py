@@ -3,7 +3,6 @@ Voice management routes
 """
 
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
@@ -103,9 +102,7 @@ async def create_voice(request: CreateVoiceRequest):
 
     except Exception as e:
         logger.error(f"Voice creation failed for agent '{request.agent_name}': {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500, detail=f"Voice creation failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Voice creation failed: {str(e)}")
 
 
 @router.post("/voices/reload")
@@ -120,6 +117,4 @@ async def reload_voices():
         }
     except Exception as e:
         logger.error(f"Voice reload failed: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500, detail=f"Failed to reload voices: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to reload voices: {str(e)}")

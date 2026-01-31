@@ -3,7 +3,7 @@ Rate Limiting Middleware
 """
 
 from datetime import datetime, timedelta
-from typing import Dict, Any
+from typing import Any, Dict
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware

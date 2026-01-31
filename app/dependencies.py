@@ -4,13 +4,14 @@ Dependencies module - Model loading and voice prompt management
 
 import io
 import logging
+import time
 from typing import Optional
 
 import numpy as np
 import soundfile as sf
 import torch
 
-from app.config import settings, VoiceConfig
+from app.config import VoiceConfig, settings
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +23,7 @@ class TTSManager:
         self.base_model = None  # For voice cloning
         self.voice_design_model = None  # For voice creation
         self.stt_model = None  # For speech-to-text
+        self.stt_load_seconds: float = 0.0  # STT model load time
         self.voice_prompts: dict = {}  # Cached voice prompts
         self.voice_config = VoiceConfig(settings)
         self._initialized = False
@@ -82,9 +84,7 @@ class TTSManager:
                 device_map="cuda:0",
                 dtype=torch.bfloat16,
             )
-            logger.info(
-                f"VoiceDesign model loaded from {settings.tts_voice_design_model_path}"
-            )
+            logger.info(f"VoiceDesign model loaded from {settings.tts_voice_design_model_path}")
         except Exception as e:
             logger.error(f"Failed to load VoiceDesign model: {e}")
             raise
@@ -94,13 +94,16 @@ class TTSManager:
         try:
             from faster_whisper import WhisperModel
 
+            start_time = time.time()
             self.stt_model = WhisperModel(
                 settings.stt_model_name,
                 device=settings.stt_device,
                 compute_type=settings.stt_compute_type,
             )
+            self.stt_load_seconds = time.time() - start_time
             logger.info(
-                f"STT model '{settings.stt_model_name}' loaded on {settings.stt_device}"
+                f"STT model '{settings.stt_model_name}' loaded on {settings.stt_device} "
+                f"in {self.stt_load_seconds:.2f}s"
             )
         except Exception as e:
             logger.error(f"Failed to load STT model: {e}")
@@ -153,10 +156,12 @@ class TTSManager:
         # Generate speech with logging
         logger.info(f"Generating speech: agent='{agent_name}', text_length={len(text)}")
         try:
+            # voice_prompt is already a List[VoiceClonePromptItem] from create_voice_clone_prompt()
+            # Do NOT wrap it in another list - that causes double-wrapping bug
             wavs, sr = self.base_model.generate_voice_clone(
                 text=text,
                 language="English",
-                voice_clone_prompt=[voice_prompt],
+                voice_clone_prompt=voice_prompt,
             )
         except Exception as e:
             logger.error(f"Model generation failed: {e}", exc_info=True)
@@ -230,9 +235,7 @@ class TTSManager:
         sf.write(audio_buffer, wavs[0], sr, format="WAV")
         return audio_buffer.getvalue()
 
-    async def transcribe_audio(
-        self, audio_bytes: bytes, language: Optional[str] = None
-    ) -> dict:
+    async def transcribe_audio(self, audio_bytes: bytes, language: Optional[str] = None) -> dict:
         """Transcribe audio using faster-whisper"""
         logger.info(f"Transcribing audio: size={len(audio_bytes)} bytes, language={language}")
 
@@ -252,16 +255,16 @@ class TTSManager:
         audio = audio.set_frame_rate(16000).set_channels(1)
 
         # Convert to numpy array
-        audio_array = (
-            np.frombuffer(audio.raw_data, np.int16).flatten().astype(np.float32)
-            / 32768.0
-        )
+        audio_array = np.frombuffer(audio.raw_data, np.int16).flatten().astype(np.float32) / 32768.0
 
-        # Transcribe
+        # Transcribe with configured options
         try:
             segments, info = self.stt_model.transcribe(
                 audio_array,
-                language=language or "en",
+                beam_size=settings.stt_beam_size,
+                best_of=settings.stt_best_of,
+                vad_filter=settings.stt_vad_filter,
+                language=language,  # Auto-detect if None
             )
         except Exception as e:
             logger.error(f"STT transcription failed: {e}", exc_info=True)

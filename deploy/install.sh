@@ -156,9 +156,10 @@ fi
 
 # Install uv for caii-voice-server user
 echo "⚡ Installing uv package manager for caii-voice-server user..."
-UV_PATH="${TARGET_DIR}/.local/bin/uv"
-if [ -f "${UV_PATH}" ]; then
-    echo "ℹ️  uv already installed at ${UV_PATH}"
+UV_ENV_FILE="${TARGET_DIR}/.local/bin/env"
+if sudo -H -u caii-voice-server bash -c "source '${UV_ENV_FILE}' 2>/dev/null && uv --version" &>/dev/null; then
+    UV_VERSION=$(sudo -H -u caii-voice-server bash -c "source '${UV_ENV_FILE}' && uv --version" 2>/dev/null)
+    echo "ℹ️  uv already installed (${UV_VERSION})"
 else
     # Install uv as caii-voice-server user with explicit HOME
     sudo -H -u caii-voice-server HOME="${TARGET_DIR}" bash -c "curl -LsSf https://astral.sh/uv/install.sh | sh"
@@ -166,54 +167,27 @@ else
     # Wait a moment for installation to complete
     sleep 2
 
-    # Verify installation by checking file existence and executability
-    if [ -f "${UV_PATH}" ] && [ -x "${UV_PATH}" ]; then
-        echo "✅ uv installed successfully at ${UV_PATH}"
+    # Verify installation by running uv as the target user with sourced env
+    if sudo -H -u caii-voice-server bash -c "source '${UV_ENV_FILE}' && uv --version" &>/dev/null; then
+        UV_VERSION=$(sudo -H -u caii-voice-server bash -c "source '${UV_ENV_FILE}' && uv --version" 2>/dev/null)
+        echo "✅ uv installed successfully (${UV_VERSION})"
     else
-        echo "❌ Error: uv installation failed (executable not found at ${UV_PATH})"
-        echo "   Falling back to pip for dependency installation"
+        echo "❌ Error: uv installation failed"
+        echo "   Check that curl can reach https://astral.sh/uv/install.sh"
+        exit 1
     fi
 fi
 
-# Set up virtual environment
-echo "🔧 Setting up virtual environment..."
+# Set up virtual environment and install dependencies
+echo "🔧 Setting up virtual environment and installing dependencies..."
 if [ -d "${TARGET_DIR}/.venv" ]; then
-    echo "ℹ️  Virtual environment already exists - updating..."
+    echo "ℹ️  Virtual environment already exists - recreating..."
     sudo rm -rf ${TARGET_DIR}/.venv
 fi
 
-# Create new virtual environment using uv (faster) or python venv
-if [ -f "${UV_PATH}" ]; then
-    sudo -H -u caii-voice-server bash -c "env PATH='${TARGET_DIR}/.local/bin:$PATH' uv venv ${TARGET_DIR}/.venv --python $PYTHON_CMD"
-    echo "✅ Virtual environment created with uv"
-else
-    sudo -H -u caii-voice-server bash -c "$PYTHON_CMD -m venv ${TARGET_DIR}/.venv"
-    echo "✅ Virtual environment created with python venv"
-fi
-
-# Install Python dependencies
-echo "📦 Installing Python dependencies..."
-
-# Install sox build dependencies first (workaround for sox package bug that imports during metadata generation)
-echo "   Installing sox build dependencies first (numpy, typing_extensions)..."
-if [ -f "${UV_PATH}" ]; then
-    sudo -H -u caii-voice-server bash -c "env PATH='${TARGET_DIR}/.local/bin:${TARGET_DIR}/.venv/bin:$PATH' uv pip install numpy typing_extensions"
-else
-    sudo -H -u caii-voice-server bash -c "${TARGET_DIR}/.venv/bin/pip install numpy typing_extensions"
-fi
-
-# Install remaining dependencies
-if [ -f "${UV_PATH}" ]; then
-    sudo -H -u caii-voice-server bash -c "cd ${TARGET_DIR} && env PATH='${TARGET_DIR}/.local/bin:${TARGET_DIR}/.venv/bin:$PATH' uv sync"
-    echo "✅ Dependencies installed with uv sync"
-else
-    if [ -f "${TARGET_DIR}/requirements.txt" ]; then
-        sudo -H -u caii-voice-server bash -c "${TARGET_DIR}/.venv/bin/pip install -r ${TARGET_DIR}/requirements.txt"
-    else
-        sudo -H -u caii-voice-server bash -c "${TARGET_DIR}/.venv/bin/pip install fastapi uvicorn pydantic-settings qwen-tts faster-whisper soundfile pydub python-multipart"
-    fi
-    echo "⚠️  Dependencies installed with pip (uv not available)"
-fi
+# uv sync creates venv and installs all dependencies from pyproject.toml
+sudo -H -u caii-voice-server bash -c "source '${UV_ENV_FILE}' && cd ${TARGET_DIR} && uv sync --python $PYTHON_CMD"
+echo "✅ Virtual environment created and dependencies installed"
 
 # Install systemd service
 echo "🔧 Installing systemd service..."
@@ -232,11 +206,7 @@ echo "   • Logs: ${TARGET_DIR}/logs"
 echo "   • Voices: ${TARGET_DIR}/voices"
 echo "   • Cache: ${TARGET_DIR}/.cache (numba JIT cache)"
 echo "   • Python: $PYTHON_CMD ($PYTHON_VERSION)"
-if [ -f "${UV_PATH}" ]; then
-    echo "   • Package Manager: uv (${UV_PATH})"
-else
-    echo "   • Package Manager: pip (fallback)"
-fi
+echo "   • Package Manager: uv"
 # Read HOST and PORT from .env for display
 ENV_HOST=$(sudo grep -E "^HOST=" ${TARGET_DIR}/.env 2>/dev/null | cut -d'=' -f2)
 ENV_PORT=$(sudo grep -E "^PORT=" ${TARGET_DIR}/.env 2>/dev/null | cut -d'=' -f2)

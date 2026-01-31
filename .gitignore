@@ -48,5 +48,9 @@ logs/
 # Local overrides
 *.local
 
+# Claude Code configuration (personal/local)
+CLAUDE.md
+.claude/
+
 # Voice files (large audio files - keep in voices/.gitignore)
 # Individual voice files are managed by voices/.gitignore

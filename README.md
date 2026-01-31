@@ -1,7 +1,7 @@
 # CAII Voice Server
 
 A modular FastAPI server for Text-to-Speech (TTS) and Speech-to-Text (STT) using local AI models:
-- **TTS**: Qwen-TTS for voice cloning and voice creation
+- **TTS**: Qwen3-TTS (1.7B parameters) for voice cloning and voice creation
 - **STT**: Faster-Whisper for speech transcription
 
 ## Features
@@ -17,9 +17,18 @@ A modular FastAPI server for Text-to-Speech (TTS) and Speech-to-Text (STT) using
 ## System Requirements
 
 ### Hardware
-- NVIDIA GPU with CUDA support (recommended)
-- Minimum 8GB VRAM for TTS models
-- 16GB+ RAM recommended
+
+Both **GPU** and **CPU** execution modes are supported.
+
+| Component | Requirement |
+|-----------|-------------|
+| **GPU** (optional) | NVIDIA with CUDA support (RTX 3060+ recommended) |
+| **VRAM** | 6-8GB for Qwen3-TTS-1.7B; 2-10GB for Whisper (model dependent) |
+| **CPU** | 4+ cores (8+ recommended for CPU-only mode) |
+| **RAM** | 16GB minimum, 32GB recommended |
+| **Storage** | 20GB+ free for models |
+
+> **Note**: For CPU-only STT, set `STT_DEVICE=cpu` and `STT_COMPUTE_TYPE=int8`. Smaller Whisper models (tiny, base, small) perform well on CPU.
 
 ### System Dependencies
 ```bash
@@ -31,85 +40,222 @@ sudo apt install libsndfile1
 ```
 
 ### AI Models Required
-Download and place these models locally:
-- **Qwen3-TTS-12Hz-1.7B-Base** - For voice cloning
-- **Qwen3-TTS-12Hz-1.7B-VoiceDesign** - For voice creation
+
+Download and place these models in your models directory:
+
+| Model | Purpose | Size |
+|-------|---------|------|
+| **Qwen3-TTS-12Hz-1.7B-Base** | Voice cloning from reference audio | ~3.4GB |
+| **Qwen3-TTS-12Hz-1.7B-VoiceDesign** | Voice creation from text descriptions | ~3.4GB |
+| **Qwen3-TTS-Tokenizer-12Hz** | Shared tokenizer (required) | ~1MB |
+
+Models can be downloaded from [Hugging Face](https://huggingface.co/Qwen).
 
 ## Quick Setup
 
 Use the automated setup script:
 ```bash
 cd /path/to/caii-voice-server
-sudo ./deploy/setup.sh
-```
-
-Then configure the server:
-```bash
-sudo nano /home/caii-voice-server/.env
-# Set TTS_BASE_MODEL_PATH and TTS_VOICE_DESIGN_MODEL_PATH
-```
-
-Start the service:
-```bash
-sudo systemctl start caii-voice-server
+sudo ./deploy/install.sh
 ```
 
 ## Configuration
 
+Configure the server **before** starting the service:
+```bash
+sudo nano /home/caii-voice-server/.env
+```
+
+Example model paths:
+```bash
+TTS_BASE_MODEL_PATH=/path/to/models/Qwen3-TTS-12Hz-1.7B-Base
+TTS_VOICE_DESIGN_MODEL_PATH=/path/to/models/Qwen3-TTS-12Hz-1.7B-VoiceDesign
+```
+
 All configuration is done via environment variables in `.env`:
+
+### Server Settings
 
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `HOST` | Server bind address | `127.0.0.1` |
 | `PORT` | Server port | `8001` |
-| `VOICE_SERVER_API_KEY` | API key for authentication (optional) | None (auth disabled) |
-| `VOICES_DIRECTORY` | Directory containing voice files | `./voices` |
-| `TTS_BASE_MODEL_PATH` | Path to Qwen-TTS Base model | **Required** |
-| `TTS_VOICE_DESIGN_MODEL_PATH` | Path to Qwen-TTS VoiceDesign model | **Required** |
-| `STT_MODEL_NAME` | Whisper model size (tiny/base/small/medium/large) | `base` |
-| `STT_DEVICE` | Device for STT (cuda/cpu) | `cuda` |
-| `STT_COMPUTE_TYPE` | Compute type for STT | `float16` |
+| `VOICE_SERVER_API_KEY` | API key for authentication (optional) | None |
 | `RATE_LIMIT_REQUESTS` | Max requests per window | `10` |
 | `RATE_LIMIT_WINDOW_SECONDS` | Rate limit window | `60` |
+
+### TTS Settings (Qwen3-TTS)
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `TTS_BASE_MODEL_PATH` | Path to Qwen-TTS Base model | **Required** |
+| `TTS_VOICE_DESIGN_MODEL_PATH` | Path to Qwen-TTS VoiceDesign model | **Required** |
+| `VOICES_DIRECTORY` | Directory containing voice files | `./voices` |
+
+### STT Settings (Faster-Whisper)
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `STT_MODEL_NAME` | Model: tiny, base, small, medium, large-v2, large-v3, turbo | `base` |
+| `STT_DEVICE` | Device: cuda, cpu, auto | `cuda` |
+| `STT_COMPUTE_TYPE` | Compute: int8, int8_float16, float16, auto | `float16` |
+| `STT_BEAM_SIZE` | Beam search width (1-10, higher = more accurate) | `5` |
+| `STT_BEST_OF` | Candidate sequences to consider (1-10) | `5` |
+| `STT_VAD_FILTER` | Voice Activity Detection to skip silence | `true` |
+
+## Starting the Service
+
+After configuration, start and enable the service:
+```bash
+# Start the service
+sudo systemctl start caii-voice-server
+
+# Enable auto-start on boot
+sudo systemctl enable caii-voice-server
+```
 
 ## API Endpoints
 
 ### Health Check
+
+Returns server health status and loaded model information.
+
 ```bash
 curl http://localhost:8001/health
 ```
 
+**Response**: JSON object with server status and model availability.
+
+---
+
 ### Text-to-Speech (OpenAI-compatible)
+
+Converts text to speech audio using the configured TTS model. This endpoint is compatible with the OpenAI TTS API format.
+
+**Endpoint**: `POST /v1/audio/speech`
+
+#### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `input` | string | **Yes** | The text to convert to speech (max 4096 characters) |
+| `voice` | string | No | Voice identifier to use. Defaults to `alloy` for OpenAI compatibility |
+| `agent` | string | No | Agent name to select a pre-configured voice (overrides `voice`) |
+| `model` | string | No | Model identifier (ignored, included for OpenAI compatibility) |
+| `response_format` | string | No | Output format: `wav`, `mp3`, `opus`, `flac`. Default: `wav` |
+| `speed` | float | No | Speech speed multiplier (0.25-4.0). Default: `1.0` |
+
+#### Example Request
 ```bash
 curl -X POST http://localhost:8001/v1/audio/speech \
   -H "Content-Type: application/json" \
   -H "X-API-Key: your-api-key" \
   -d '{
-    "model": "tts-1",
     "input": "Hello, how are you today?",
     "voice": "alloy",
-    "agent": "da"
+    "agent": "da",
+    "response_format": "wav",
+    "speed": 1.0
   }' \
   --output speech.wav
 ```
 
-The `agent` parameter selects which pre-configured voice to use.
+#### Response
+Binary audio data in the requested format.
+
+---
 
 ### Speech-to-Text (OpenAI-compatible)
+
+Transcribes audio files to text using Faster-Whisper. This endpoint is compatible with the OpenAI Whisper API format.
+
+**Endpoint**: `POST /v1/audio/transcriptions`
+
+#### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `file` | file | **Yes** | Audio file to transcribe (wav, mp3, m4a, webm, mp4, mpeg, mpga, oga, ogg) |
+| `model` | string | No | Model identifier (ignored, uses server-configured model) |
+| `language` | string | No | ISO-639-1 language code (e.g., `en`, `es`, `fr`). Auto-detected if omitted |
+| `prompt` | string | No | Optional text to guide transcription style or provide context |
+| `response_format` | string | No | Output format: `json`, `text`, `verbose_json`, `srt`, `vtt`. Default: `json` |
+| `temperature` | float | No | Sampling temperature (0.0-1.0). Lower = more deterministic. Default: `0.0` |
+
+#### Example Request
 ```bash
 curl -X POST http://localhost:8001/v1/audio/transcriptions \
   -H "X-API-Key: your-api-key" \
   -F "file=@audio.wav" \
-  -F "model=whisper-1"
+  -F "model=whisper-1" \
+  -F "language=en" \
+  -F "response_format=json"
 ```
 
+#### Response (JSON format)
+```json
+{
+  "text": "The transcribed text from the audio file."
+}
+```
+
+#### Response (verbose_json format)
+```json
+{
+  "text": "The transcribed text from the audio file.",
+  "segments": [...],
+  "language": "en",
+  "duration": 5.2
+}
+```
+
+---
+
 ### List Voices
+
+Returns all available voices configured on the server.
+
+**Endpoint**: `GET /v1/voices`
+
+#### Parameters
+
+None.
+
+#### Example Request
 ```bash
 curl http://localhost:8001/v1/voices \
   -H "X-API-Key: your-api-key"
 ```
 
+#### Response
+```json
+{
+  "voices": [
+    {
+      "name": "da",
+      "description": "Female, mid-thirties. Warm, smooth timbre."
+    },
+    ...
+  ]
+}
+```
+
+---
+
 ### Create New Voice
+
+Creates a new voice using the VoiceDesign model based on a text description.
+
+**Endpoint**: `POST /v1/voices`
+
+#### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `agent_name` | string | **Yes** | Unique identifier for the new voice |
+| `instruct` | string | **Yes** | Text description of the desired voice characteristics (gender, age, timbre, pitch, etc.) |
+
+#### Example Request
 ```bash
 curl -X POST http://localhost:8001/v1/voices \
   -H "Content-Type: application/json" \
@@ -121,23 +267,36 @@ curl -X POST http://localhost:8001/v1/voices \
   --output custom.wav
 ```
 
+#### Response
+Binary WAV audio file containing a sample of the generated voice.
+
+---
+
 ### Reload Voices
+
+Reloads the voice configuration from disk without restarting the server. Use this after adding new voice files or modifying `voices.json`.
+
+**Endpoint**: `POST /v1/voices/reload`
+
+#### Parameters
+
+None.
+
+#### Example Request
 ```bash
 curl -X POST http://localhost:8001/v1/voices/reload \
   -H "X-API-Key: your-api-key"
 ```
 
-## Pre-configured Agent Voices
+#### Response
+```json
+{
+  "status": "ok",
+  "voices_loaded": 7
+}
+```
 
-| Agent | Description |
-|-------|-------------|
-| `da` | Female, mid-thirties. Warm, smooth timbre with clear mid-range pitch |
-| `analysis` | Male, early thirties. Sharp, focused timbre with clear mid-range pitch |
-| `clarification` | Female, late twenties. Clear, gentle timbre with slightly bright mid-range pitch |
-| `memory` | Male, mid-fifties. Rich, grounded timbre with warm low-mid pitch |
-| `research` | Male, early forties. Warm, scholarly timbre with natural mid-range pitch |
-| `synthesis` | Female, mid-forties. Smooth, harmonious timbre with calm mid-range pitch |
-| `verification` | Female, late thirties. Crisp, confident timbre with clear mid-range pitch |
+---
 
 ## File Structure
 
@@ -164,7 +323,7 @@ caii-voice-server/
 │   ├── voices.json             # Voice metadata configuration
 │   └── *.wav                   # Voice reference audio files
 ├── deploy/
-│   ├── setup.sh                # Automated installation script
+│   ├── install.sh              # Automated installation script
 │   ├── uninstall.sh            # Complete removal script
 │   └── caii-voice-server.service  # Systemd service file
 ├── .env.example                # Configuration template
@@ -179,6 +338,10 @@ caii-voice-server/
 sudo systemctl start caii-voice-server
 sudo systemctl stop caii-voice-server
 sudo systemctl restart caii-voice-server
+
+# Enable/disable auto-start
+sudo systemctl enable caii-voice-server
+sudo systemctl disable caii-voice-server
 
 # Check status
 sudo systemctl status caii-voice-server
@@ -244,8 +407,8 @@ sudo -u caii-voice-server bash -c 'cd /home/caii-voice-server && .venv/bin/pytho
 sudo cat /home/caii-voice-server/.env | grep MODEL
 
 # Check if models exist
-ls -la /path/to/Qwen3-TTS-12Hz-1.7B-Base
-ls -la /path/to/Qwen3-TTS-12Hz-1.7B-VoiceDesign
+ls -la /path/to/models/Qwen3-TTS-12Hz-1.7B-Base
+ls -la /path/to/models/Qwen3-TTS-12Hz-1.7B-VoiceDesign
 ```
 
 ### Permission Issues
@@ -283,7 +446,3 @@ This will:
 - System Python or packages
 - The source project directory
 - External AI model files
-
-## License
-
-See [LICENSE](LICENSE) file.

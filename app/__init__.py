@@ -2,14 +2,14 @@
 CAII Voice Server - Modular FastAPI application for TTS/STT
 """
 
-from fastapi import FastAPI
 from contextlib import asynccontextmanager
 
-from app.config import settings
+from fastapi import FastAPI
+
+from app.api.routes import router
 from app.dependencies import tts_manager
 from app.middleware.auth import AuthMiddleware
 from app.middleware.rate_limit import RateLimitMiddleware
-from app.api.routes import router
 
 
 @asynccontextmanager

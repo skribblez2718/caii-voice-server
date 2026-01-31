@@ -7,9 +7,9 @@ Modular FastAPI application for TTS/STT using:
 """
 
 import logging
+
 import uvicorn
 
-from app import app
 from app.config import settings
 
 # Configure logging
@@ -20,7 +20,7 @@ logging.basicConfig(
 
 if __name__ == "__main__":
     uvicorn.run(
-        "main:app",
+        "app:app",
         host=settings.host,
         port=settings.port,
         reload=False,

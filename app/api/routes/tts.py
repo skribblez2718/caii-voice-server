@@ -52,9 +52,7 @@ async def text_to_speech(request: TTSRequest):
     """
     # Validate input length
     if len(request.input) > 4096:
-        raise HTTPException(
-            status_code=400, detail="Input text exceeds 4096 character limit"
-        )
+        raise HTTPException(status_code=400, detail="Input text exceeds 4096 character limit")
 
     if not request.input.strip():
         raise HTTPException(status_code=400, detail="Input text is empty")
@@ -74,7 +72,7 @@ async def text_to_speech(request: TTSRequest):
             iter([audio_bytes]),
             media_type="audio/wav",
             headers={
-                "Content-Disposition": f"attachment; filename=speech.wav",
+                "Content-Disposition": "attachment; filename=speech.wav",
                 "X-Agent-Voice": agent_name,
             },
         )

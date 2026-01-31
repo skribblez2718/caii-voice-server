@@ -47,7 +47,9 @@ async def speech_to_text(
     try:
         # Read audio content
         audio_bytes = await file.read()
-        logger.info(f"STT request: file={file.filename}, size={len(audio_bytes)} bytes, language={language}")
+        logger.info(
+            f"STT request: file={file.filename}, size={len(audio_bytes)} bytes, language={language}"
+        )
 
         if not audio_bytes:
             raise HTTPException(status_code=400, detail="Empty audio file")

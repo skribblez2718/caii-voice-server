@@ -3,8 +3,8 @@
 from fastapi import APIRouter
 
 from app.api.routes.health import router as health_router
-from app.api.routes.tts import router as tts_router
 from app.api.routes.stt import router as stt_router
+from app.api.routes.tts import router as tts_router
 from app.api.routes.voice import router as voice_router
 
 router = APIRouter()

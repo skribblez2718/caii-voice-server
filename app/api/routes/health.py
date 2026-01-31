@@ -38,6 +38,15 @@ async def health():
             "tts_voice_design": tts_manager.voice_design_model is not None,
             "stt": tts_manager.stt_model is not None,
         },
+        "stt": {
+            "model": settings.stt_model_name,
+            "device": settings.stt_device,
+            "compute_type": settings.stt_compute_type,
+            "beam_size": settings.stt_beam_size,
+            "best_of": settings.stt_best_of,
+            "vad_filter": settings.stt_vad_filter,
+            "startup_load_seconds": tts_manager.stt_load_seconds,
+        },
         "voices_loaded": len(tts_manager.voice_prompts),
         "auth_enabled": settings.voice_server_api_key is not None,
     }

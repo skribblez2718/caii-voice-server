@@ -3,9 +3,9 @@ Configuration module using pydantic-settings
 """
 
 import json
+from functools import lru_cache
 from pathlib import Path
 from typing import Optional
-from functools import lru_cache
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -41,6 +41,18 @@ class Settings(BaseSettings):
     stt_compute_type: str = Field(
         default="float16",
         description="Compute type for STT model",
+    )
+    stt_beam_size: int = Field(
+        default=5,
+        description="Beam search width for STT (higher = more accurate but slower)",
+    )
+    stt_best_of: int = Field(
+        default=5,
+        description="Number of candidate sequences to consider for STT",
+    )
+    stt_vad_filter: bool = Field(
+        default=True,
+        description="Enable Voice Activity Detection to skip silence for faster inference",
     )
 
     # Voice settings
@@ -115,9 +127,7 @@ class VoiceConfig:
             return self.settings.voices_directory / voice["file"]
         return None
 
-    def add_voice(
-        self, agent_name: str, file: str, description: str, instruct: str
-    ) -> None:
+    def add_voice(self, agent_name: str, file: str, description: str, instruct: str) -> None:
         """Add a new voice configuration"""
         self._config["voices"][agent_name] = {
             "file": file,
