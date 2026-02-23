@@ -2,6 +2,7 @@
 Dependencies module - Model loading and voice prompt management
 """
 
+import asyncio
 import io
 import logging
 import time
@@ -28,6 +29,13 @@ class TTSManager:
         self.voice_config = VoiceConfig(settings)
         self._initialized = False
 
+        # Offload state tracking
+        self._last_tts_request_time: float = 0.0
+        self._model_location: str = "unloaded"  # "cuda", "cpu", "unloaded"
+        self._offload_lock: asyncio.Lock = asyncio.Lock()
+        self._offload_task: Optional[asyncio.Task] = None
+        self._shutdown_event: asyncio.Event = asyncio.Event()
+
     async def startup(self) -> None:
         """Load models and pre-compute voice prompts at startup"""
         if self._initialized:
@@ -45,11 +53,23 @@ class TTSManager:
         logger.info("Pre-computing voice prompts for all agents...")
         await self._precompute_voice_prompts()
 
+        self._model_location = "cuda"
+        self._last_tts_request_time = time.time()
+        if settings.model_offload_enabled:
+            self._offload_task = asyncio.create_task(self._offload_monitor_loop())
+
         self._initialized = True
         logger.info("All models loaded and voice prompts cached")
 
     async def shutdown(self) -> None:
         """Cleanup resources"""
+        if self._offload_task:
+            self._shutdown_event.set()
+            try:
+                await asyncio.wait_for(self._offload_task, timeout=5.0)
+            except asyncio.TimeoutError:
+                self._offload_task.cancel()
+
         self.base_model = None
         self.voice_design_model = None
         self.stt_model = None
@@ -127,6 +147,69 @@ class TTSManager:
             else:
                 logger.warning(f"Voice file not found for {agent_name}: {voice_file}")
 
+    async def _offload_to_cpu(self) -> None:
+        """Move TTS models to CPU and free GPU memory"""
+        async with self._offload_lock:
+            if self._model_location != "cuda":
+                return
+
+            logger.info("Offloading TTS models to CPU...")
+            if self.base_model is not None:
+                self.base_model = self.base_model.cpu()
+            if self.voice_design_model is not None:
+                self.voice_design_model = self.voice_design_model.cpu()
+
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+            self._model_location = "cpu"
+            logger.info("Models offloaded to CPU, GPU memory freed")
+
+    async def _ensure_models_on_gpu(self) -> None:
+        """Ensure TTS models are on GPU (reload if needed)"""
+        async with self._offload_lock:
+            if self._model_location == "cuda":
+                return
+
+            logger.info(f"Loading TTS models to GPU (from {self._model_location})...")
+            start = time.time()
+
+            if self._model_location == "cpu":
+                if self.base_model is not None:
+                    self.base_model = self.base_model.cuda()
+                if self.voice_design_model is not None:
+                    self.voice_design_model = self.voice_design_model.cuda()
+            else:  # unloaded
+                await self._load_base_model()
+                await self._load_voice_design_model()
+                await self._precompute_voice_prompts()
+
+            self._model_location = "cuda"
+            logger.info(f"Models loaded to GPU in {time.time() - start:.2f}s")
+
+    async def _offload_monitor_loop(self) -> None:
+        """Background task checking idle time"""
+        logger.info("Model offload monitor started")
+        while not self._shutdown_event.is_set():
+            try:
+                await asyncio.wait_for(
+                    self._shutdown_event.wait(),
+                    timeout=settings.model_offload_check_interval_seconds
+                )
+                break
+            except asyncio.TimeoutError:
+                pass
+
+            if not settings.model_offload_enabled or self._last_tts_request_time == 0:
+                continue
+
+            idle = time.time() - self._last_tts_request_time
+            if idle >= settings.model_idle_timeout_seconds:
+                try:
+                    await self._offload_to_cpu()
+                except Exception as e:
+                    logger.error(f"Offload failed: {e}")
+        logger.info("Model offload monitor stopped")
+
     def get_voice_prompt(self, agent_name: str) -> Optional[list]:
         """Get cached voice prompt for an agent"""
         return self.voice_prompts.get(agent_name)
@@ -139,6 +222,9 @@ class TTSManager:
 
     async def generate_speech(self, text: str, agent_name: str) -> bytes:
         """Generate speech using voice cloning"""
+        await self._ensure_models_on_gpu()
+        self._last_tts_request_time = time.time()
+
         voice_prompt = self.get_voice_prompt(agent_name)
 
         if voice_prompt is None:
@@ -180,6 +266,9 @@ class TTSManager:
 
     async def create_voice(self, agent_name: str, instruct: str) -> bytes:
         """Create a new voice using VoiceDesign model"""
+        await self._ensure_models_on_gpu()
+        self._last_tts_request_time = time.time()
+
         logger.info(f"Creating voice: agent='{agent_name}'")
 
         if self.voice_design_model is None:

@@ -70,6 +70,20 @@ class Settings(BaseSettings):
         description="Path to Qwen-TTS VoiceDesign model for voice creation",
     )
 
+    # Model offloading settings
+    model_offload_enabled: bool = Field(
+        default=True,
+        description="Enable TTL-based model offloading to free GPU memory when idle",
+    )
+    model_idle_timeout_seconds: int = Field(
+        default=300,
+        description="Seconds of inactivity before offloading TTS models to CPU",
+    )
+    model_offload_check_interval_seconds: int = Field(
+        default=60,
+        description="How often to check for idle models",
+    )
+
     # Rate limiting
     rate_limit_requests: int = Field(
         default=10,

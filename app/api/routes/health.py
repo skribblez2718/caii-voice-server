@@ -2,6 +2,8 @@
 Health check routes
 """
 
+import time
+
 from fastapi import APIRouter
 
 from app.config import settings
@@ -49,4 +51,13 @@ async def health():
         },
         "voices_loaded": len(tts_manager.voice_prompts),
         "auth_enabled": settings.voice_server_api_key is not None,
+        "model_offload": {
+            "enabled": settings.model_offload_enabled,
+            "location": tts_manager._model_location,
+            "idle_timeout_seconds": settings.model_idle_timeout_seconds,
+            "seconds_since_last_request": (
+                time.time() - tts_manager._last_tts_request_time
+                if tts_manager._last_tts_request_time > 0 else 0
+            ),
+        },
     }
