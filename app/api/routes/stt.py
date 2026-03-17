@@ -8,6 +8,7 @@ from typing import Optional
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import PlainTextResponse
 
+from app.config import settings
 from app.dependencies import tts_manager
 
 logger = logging.getLogger(__name__)
@@ -54,6 +55,9 @@ async def speech_to_text(
         if not audio_bytes:
             raise HTTPException(status_code=400, detail="Empty audio file")
 
+        if len(audio_bytes) > settings.max_upload_size_bytes:
+            raise HTTPException(status_code=413, detail="Audio file exceeds maximum upload size")
+
         # Transcribe
         result = await tts_manager.transcribe_audio(
             audio_bytes=audio_bytes,
@@ -93,4 +97,4 @@ async def speech_to_text(
         raise
     except Exception as e:
         logger.error(f"Transcription failed for file '{file.filename}': {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Transcription failed")

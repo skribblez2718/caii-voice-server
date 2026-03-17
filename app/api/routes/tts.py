@@ -82,4 +82,4 @@ async def text_to_speech(request: TTSRequest):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"TTS generation failed for agent '{agent_name}': {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Speech generation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Speech generation failed")

@@ -84,6 +84,12 @@ class Settings(BaseSettings):
         description="How often to check for idle models",
     )
 
+    # Upload limits
+    max_upload_size_bytes: int = Field(
+        default=52_428_800,
+        description="Maximum audio upload size in bytes (default: 50MB)",
+    )
+
     # Rate limiting
     rate_limit_requests: int = Field(
         default=10,

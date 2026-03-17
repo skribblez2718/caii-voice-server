@@ -25,6 +25,8 @@ class TestHealthEndpoint:
         mock_manager.stt_model = MagicMock()
         mock_manager.stt_load_seconds = 2.5
         mock_manager.voice_prompts = {"da": []}
+        mock_manager._last_tts_request_time = 0
+        mock_manager._model_location = "gpu"
 
         with patch("app.api.routes.health.tts_manager", mock_manager):
             with patch("app.api.routes.health.settings") as mock_settings:
@@ -37,6 +39,8 @@ class TestHealthEndpoint:
                 mock_settings.stt_beam_size = 5
                 mock_settings.stt_best_of = 5
                 mock_settings.stt_vad_filter = True
+                mock_settings.model_offload_enabled = False
+                mock_settings.model_idle_timeout_seconds = 300
 
                 client = TestClient(app)
                 response = client.get("/health")
@@ -72,6 +76,8 @@ class TestHealthEndpoint:
         mock_manager.stt_model = MagicMock()
         mock_manager.stt_load_seconds = 5.0
         mock_manager.voice_prompts = {}
+        mock_manager._last_tts_request_time = 0
+        mock_manager._model_location = "cpu"
 
         with patch("app.api.routes.health.tts_manager", mock_manager):
             with patch("app.api.routes.health.settings") as mock_settings:
@@ -84,6 +90,8 @@ class TestHealthEndpoint:
                 mock_settings.stt_beam_size = 10
                 mock_settings.stt_best_of = 3
                 mock_settings.stt_vad_filter = False
+                mock_settings.model_offload_enabled = True
+                mock_settings.model_idle_timeout_seconds = 600
 
                 client = TestClient(app)
                 response = client.get("/health")

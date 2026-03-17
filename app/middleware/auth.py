@@ -2,6 +2,8 @@
 API Key Authentication Middleware
 """
 
+import hmac
+
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
@@ -50,7 +52,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 content={"detail": "Missing API key. Use X-API-Key header or Bearer token."},
             )
 
-        if api_key != settings.voice_server_api_key:
+        if not hmac.compare_digest(api_key, settings.voice_server_api_key):
             return JSONResponse(
                 status_code=403,
                 content={"detail": "Invalid API key"},

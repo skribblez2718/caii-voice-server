@@ -31,6 +31,11 @@ dev = [
     "httpx>=0.28.0",
     "ruff>=0.9.0",
 ]
+ptt = [
+    "sounddevice>=0.4.0",
+    "pynput>=1.7.0",
+    "python-evdev>=1.6.0; sys_platform == 'linux'",
+]
 
 [dependency-groups]
 dev = [
@@ -40,6 +45,14 @@ dev = [
     "httpx>=0.28.0",
     "ruff>=0.9.0",
 ]
+ptt = [
+    "sounddevice>=0.4.0",
+    "pynput>=1.7.0",
+    "python-evdev>=1.6.0; sys_platform == 'linux'",
+]
+
+[project.scripts]
+caii-ptt = "client.stt.main:main"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -58,5 +71,5 @@ select = ["E", "F", "I", "W"]
 ignore = ["E501"]
 
 [tool.coverage.run]
-source = ["app"]
+source = ["app", "client"]
 omit = ["tests/*"]

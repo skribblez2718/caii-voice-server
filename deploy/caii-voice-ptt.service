@@ -1,0 +1,22 @@
+[Unit]
+Description=CAII Voice Push-to-Talk STT Client
+Documentation=https://github.com/your-org/caii-voice-server
+After=network.target graphical-session.target
+Wants=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/caii-ptt --log-level INFO
+Restart=on-failure
+RestartSec=5
+
+# Environment
+Environment=DISPLAY=:0
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=caii-voice-ptt
+
+[Install]
+WantedBy=default.target
